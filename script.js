@@ -24,11 +24,14 @@ const statusText = document.getElementById("status-text");
 const searchForm = document.getElementById("search-form");
 const searchInput = document.getElementById("search-input");
 const refreshBtn = document.getElementById("refresh-btn");
+const translateBtn = document.getElementById("translate-btn");
 
 // ===== 狀態 =====
 let currentQuery = TOPICS[0].query; // 目前正在監測的關鍵字
 let seenIds = new Set();            // 記住已經看過的新聞編號，用來判斷哪些是「新的」
 let firstLoad = true;               // 第一次載入時，不把全部都標成新的
+let showChinese = true;             // 要不要顯示中文標題
+const translations = {};            // 翻譯過的標題先存起來，下次就不用再翻一次
 
 // ===== 產生主題按鈕 =====
 TOPICS.forEach(function (topic, index) {
@@ -98,6 +101,7 @@ function showNews(items) {
 
   let newCount = 0;
   let hotCount = 0;
+  const waitList = []; // 等一下要翻譯的標題清單
 
   items.forEach(function (item) {
     // 判斷是不是新的：不是第一次載入，而且以前沒看過
@@ -115,11 +119,26 @@ function showNews(items) {
     const li = document.createElement("li");
     li.className = "news-item" + (isNew ? " is-new" : "");
 
-    // 標題連結（用 textContent 放文字，比較安全）
+    // 標題連結：裡面放「中文標題」和「英文原文」兩行
     const a = document.createElement("a");
     a.href = link;
     a.target = "_blank";
-    a.textContent = item.title;
+
+    const zh = document.createElement("span");
+    zh.className = "zh-title";
+    zh.textContent = translations[item.title] || ""; // 翻過的就直接用，沒翻過先空著
+
+    const en = document.createElement("span");
+    en.className = "en-title";
+    en.textContent = item.title; // 用 textContent 放文字，比較安全
+
+    a.appendChild(zh);
+    a.appendChild(en);
+
+    // 還沒翻過的，放進等待清單
+    if (!translations[item.title]) {
+      waitList.push({ text: item.title, box: zh });
+    }
 
     // 下方的小資訊
     const meta = document.createElement("div");
@@ -142,6 +161,45 @@ function showNews(items) {
 
   updateStats(items.length, newCount, hotCount);
   firstLoad = false;
+
+  // 新聞先顯示出來，再慢慢把標題翻成中文
+  translateAll(waitList);
+}
+
+// ===== 翻譯功能 =====
+
+// 一則一則翻譯，翻好一則就馬上顯示一則
+async function translateAll(waitList) {
+  if (!showChinese) return; // 關閉翻譯時就不翻
+
+  for (const job of waitList) {
+    const result = await translate(job.text);
+    if (result) {
+      translations[job.text] = result; // 存起來
+      job.box.textContent = result;    // 填進畫面
+    }
+  }
+}
+
+// 把一段英文翻成繁體中文（使用 Google 翻譯的免費網址，不用金鑰）
+async function translate(text) {
+  const url =
+    "https://translate.googleapis.com/translate_a/single" +
+    "?client=gtx&sl=en&tl=zh-TW&dt=t" +
+    "&q=" + encodeURIComponent(text);
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    // 回傳的資料長得像 [[["中文","英文",...], ...], ...]
+    // 一句話可能被切成好幾段，所以要把每一段的中文接起來
+    return data[0].map(function (part) {
+      return part[0];
+    }).join("");
+  } catch (error) {
+    return ""; // 翻譯失敗就算了，至少還有英文原文
+  }
 }
 
 // ===== 小工具們 =====
@@ -191,6 +249,25 @@ searchForm.addEventListener("submit", function (event) {
 
 // 按下「立即更新」
 refreshBtn.addEventListener("click", loadNews);
+
+// 按下「中文標題：開／關」
+translateBtn.addEventListener("click", function () {
+  showChinese = !showChinese; // 開變關、關變開
+  translateBtn.textContent = showChinese ? "🈶 中文標題：開" : "🔤 中文標題：關";
+  document.body.classList.toggle("no-zh", !showChinese); // 用 CSS 藏起或顯示中文
+
+  // 重新打開時，把還沒翻的補翻
+  if (showChinese) {
+    const waitList = [];
+    document.querySelectorAll(".news-item").forEach(function (li) {
+      const zh = li.querySelector(".zh-title");
+      if (zh.textContent === "") {
+        waitList.push({ text: li.querySelector(".en-title").textContent, box: zh });
+      }
+    });
+    translateAll(waitList);
+  }
+});
 
 // ===== 啟動 =====
 loadNews();
