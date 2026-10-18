@@ -169,6 +169,35 @@ body {
   text-decoration: underline;
 }
 
+/* 收藏星星按鈕：放在每則新聞的右上角 */
+.star-btn {
+  float: right;
+  margin-left: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+}
+
+/* 已收藏：星星變金色 */
+.star-btn.saved {
+  color: #facc15;
+}
+
+/* 「我的收藏」按鈕：金色外框，和主題按鈕區分 */
+.topics .fav-view-btn {
+  border-color: #facc15;
+  color: #facc15;
+}
+
+.topics .fav-view-btn.active {
+  background: #facc15;
+  color: #0f172a;
+}
+
 /* 標題：中文在上（大字），英文原文在下（小字） */
 .zh-title {
   display: block;

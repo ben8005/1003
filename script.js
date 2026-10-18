@@ -16,6 +16,9 @@ const REFRESH_MINUTES = 5;
 // 分數超過多少算「熱門」
 const HOT_POINTS = 100;
 
+// 收藏存在瀏覽器裡用的名字
+const FAV_KEY = "ai-news-favorites";
+
 // ===== 抓取網頁上的元素 =====
 const topicsBox = document.getElementById("topics");
 const newsList = document.getElementById("news-list");
@@ -32,6 +35,8 @@ let seenIds = new Set();            // 記住已經看過的新聞編號，用�
 let firstLoad = true;               // 第一次載入時，不把全部都標成新的
 let showChinese = true;             // 要不要顯示中文標題
 const translations = {};            // 翻譯過的標題先存起來，下次就不用再翻一次
+let favorites = loadFavorites();    // 收藏的新聞清單
+let viewingFavs = false;            // 現在是不是正在看收藏
 
 // ===== 產生主題按鈕 =====
 TOPICS.forEach(function (topic, index) {
@@ -51,9 +56,26 @@ TOPICS.forEach(function (topic, index) {
   topicsBox.appendChild(btn);
 });
 
+// ===== 產生「我的收藏」按鈕（放在主題按鈕最後面）=====
+const favBtn = document.createElement("button");
+favBtn.className = "fav-view-btn";
+updateFavButton();
+
+favBtn.addEventListener("click", function () {
+  document.querySelectorAll(".topics button").forEach(function (b) {
+    b.classList.remove("active");
+  });
+  favBtn.classList.add("active");
+  viewingFavs = true;
+  showFavorites();
+});
+
+topicsBox.appendChild(favBtn);
+
 // ===== 切換關鍵字：清空紀錄後重新抓 =====
 function changeQuery(query) {
   currentQuery = query;
+  viewingFavs = false; // 離開收藏畫面
   seenIds = new Set();
   firstLoad = true;
   loadNews();
@@ -61,6 +83,12 @@ function changeQuery(query) {
 
 // ===== 主要功能：去抓新聞 =====
 async function loadNews() {
+  // 正在看收藏時，不去抓新聞，只重新顯示收藏
+  if (viewingFavs) {
+    showFavorites();
+    return;
+  }
+
   setStatus("loading", "讀取中…");
 
   // 只抓最近 3 天的新聞（時間用「秒」來算）
@@ -79,6 +107,9 @@ async function loadNews() {
     if (!response.ok) throw new Error("伺服器回應錯誤：" + response.status);
 
     const data = await response.json();
+
+    // 等待期間如果使用者切到「我的收藏」，就不要蓋掉收藏畫面
+    if (viewingFavs) return;
     showNews(data.hits);
 
     const time = new Date().toLocaleTimeString("zh-TW");
@@ -111,49 +142,7 @@ function showNews(items) {
     if (isHot) hotCount++;
     seenIds.add(item.objectID);
 
-    // 有些文章沒有外部連結，就改連到 Hacker News 討論頁
-    const discussUrl = "https://news.ycombinator.com/item?id=" + item.objectID;
-    const link = item.url || discussUrl;
-
-    // 建立一則新聞
-    const li = document.createElement("li");
-    li.className = "news-item" + (isNew ? " is-new" : "");
-
-    // 標題連結：裡面放「中文標題」和「英文原文」兩行
-    const a = document.createElement("a");
-    a.href = link;
-    a.target = "_blank";
-
-    const zh = document.createElement("span");
-    zh.className = "zh-title";
-    zh.textContent = translations[item.title] || ""; // 翻過的就直接用，沒翻過先空著
-
-    const en = document.createElement("span");
-    en.className = "en-title";
-    en.textContent = item.title; // 用 textContent 放文字，比較安全
-
-    a.appendChild(zh);
-    a.appendChild(en);
-
-    // 還沒翻過的，放進等待清單
-    if (!translations[item.title]) {
-      waitList.push({ text: item.title, box: zh });
-    }
-
-    // 下方的小資訊
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.innerHTML =
-      (isNew ? '<span class="tag new">新</span>' : "") +
-      (isHot ? '<span class="tag hot">熱門</span>' : "") +
-      "🌐 " + getSite(item.url) +
-      "・⏱ " + timeAgo(item.created_at_i) +
-      "・👍 " + (item.points || 0) + " 分" +
-      '・<a href="' + discussUrl + '" target="_blank">💬 ' + (item.num_comments || 0) + " 則留言</a>";
-
-    li.appendChild(a);
-    li.appendChild(meta);
-    newsList.appendChild(li);
+    newsList.appendChild(createNewsItem(item, isNew, isHot, waitList));
   });
 
   // 有新新聞時，在分頁標題上提醒
@@ -163,6 +152,156 @@ function showNews(items) {
   firstLoad = false;
 
   // 新聞先顯示出來，再慢慢把標題翻成中文
+  translateAll(waitList);
+}
+
+// ===== 建立「一則新聞」的畫面（一般列表和收藏列表都用這個）=====
+function createNewsItem(item, isNew, isHot, waitList) {
+  // 有些文章沒有外部連結，就改連到 Hacker News 討論頁
+  const discussUrl = "https://news.ycombinator.com/item?id=" + item.objectID;
+  const link = item.url || discussUrl;
+
+  const li = document.createElement("li");
+  li.className = "news-item" + (isNew ? " is-new" : "");
+
+  // 收藏按鈕（星星）：收藏了是 ★，沒收藏是 ☆
+  const star = document.createElement("button");
+  star.className = "star-btn";
+  setStar(star, isFavorite(item.objectID));
+  star.addEventListener("click", function () {
+    toggleFavorite(item);
+    setStar(star, isFavorite(item.objectID));
+  });
+
+  // 標題連結：裡面放「中文標題」和「英文原文」兩行
+  const a = document.createElement("a");
+  a.href = link;
+  a.target = "_blank";
+
+  // 中文標題：先找記憶中翻好的，再找收藏時一起存下來的
+  const zhText = translations[item.title] || item.zh || "";
+
+  const zh = document.createElement("span");
+  zh.className = "zh-title";
+  zh.textContent = zhText;
+
+  const en = document.createElement("span");
+  en.className = "en-title";
+  en.textContent = item.title; // 用 textContent 放文字，比較安全
+
+  a.appendChild(zh);
+  a.appendChild(en);
+
+  // 還沒翻過的，放進等待清單
+  if (zhText === "") {
+    waitList.push({ text: item.title, box: zh });
+  }
+
+  // 下方的小資訊
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML =
+    (isNew ? '<span class="tag new">新</span>' : "") +
+    (isHot ? '<span class="tag hot">熱門</span>' : "") +
+    "🌐 " + getSite(item.url) +
+    "・⏱ " + timeAgo(item.created_at_i) +
+    "・👍 " + (item.points || 0) + " 分" +
+    '・<a href="' + discussUrl + '" target="_blank">💬 ' + (item.num_comments || 0) + " 則留言</a>";
+
+  li.appendChild(star);
+  li.appendChild(a);
+  li.appendChild(meta);
+  return li;
+}
+
+// ===== 收藏功能 =====
+
+// 從瀏覽器讀出之前存的收藏（關掉網頁再打開也還在）
+function loadFavorites() {
+  try {
+    return JSON.parse(localStorage.getItem(FAV_KEY)) || [];
+  } catch (error) {
+    return []; // 讀不到就當作沒有收藏
+  }
+}
+
+// 把收藏存進瀏覽器
+function saveFavorites() {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
+  } catch (error) {
+    // 有些瀏覽器（例如無痕模式）不讓存，就只在這次開著時有效
+  }
+}
+
+// 檢查某則新聞有沒有被收藏
+function isFavorite(id) {
+  return favorites.some(function (fav) {
+    return fav.objectID === id;
+  });
+}
+
+// 收藏 ↔ 取消收藏
+function toggleFavorite(item) {
+  if (isFavorite(item.objectID)) {
+    // 取消收藏：把這則從清單中拿掉
+    favorites = favorites.filter(function (fav) {
+      return fav.objectID !== item.objectID;
+    });
+  } else {
+    // 加入收藏：只存需要的欄位，中文標題也一起存
+    favorites.unshift({
+      objectID: item.objectID,
+      title: item.title,
+      zh: translations[item.title] || item.zh || "",
+      url: item.url,
+      created_at_i: item.created_at_i,
+      points: item.points,
+      num_comments: item.num_comments
+    });
+  }
+
+  saveFavorites();
+  updateFavButton();
+
+  // 正在看收藏時，取消收藏要馬上從畫面消失
+  if (viewingFavs) showFavorites();
+}
+
+// 改變星星按鈕的樣子
+function setStar(star, saved) {
+  star.textContent = saved ? "★" : "☆";
+  star.title = saved ? "取消收藏" : "加入收藏";
+  star.classList.toggle("saved", saved);
+}
+
+// 更新「我的收藏」按鈕上的數字
+function updateFavButton() {
+  favBtn.textContent = "⭐ 我的收藏（" + favorites.length + "）";
+}
+
+// 顯示收藏列表
+function showFavorites() {
+  newsList.innerHTML = "";
+  document.title = "AI 新聞監測站";
+  setStatus("ok", "正在看我的收藏（不會自動更新）");
+
+  if (favorites.length === 0) {
+    newsList.innerHTML = '<li class="empty">還沒有收藏，按新聞右上角的 ☆ 就能收藏</li>';
+    updateStats(0, 0, 0);
+    return;
+  }
+
+  let hotCount = 0;
+  const waitList = [];
+
+  favorites.forEach(function (item) {
+    const isHot = item.points >= HOT_POINTS;
+    if (isHot) hotCount++;
+    newsList.appendChild(createNewsItem(item, false, isHot, waitList));
+  });
+
+  updateStats(favorites.length, 0, hotCount);
   translateAll(waitList);
 }
 
