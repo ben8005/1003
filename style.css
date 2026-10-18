@@ -1,0 +1,213 @@
+/* ===== 基本設定 ===== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* ===== 頁首 ===== */
+.top {
+  padding: 24px 16px;
+  text-align: center;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.top h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.status {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+/* 狀態小圓點：綠色＝正常，黃色＝讀取中，紅色＝出錯 */
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.dot.ok {
+  background: #22c55e;
+}
+
+.dot.loading {
+  background: #eab308;
+}
+
+.dot.error {
+  background: #ef4444;
+}
+
+/* ===== 主要區塊 ===== */
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+/* 主題按鈕 */
+.topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.topics button {
+  padding: 6px 14px;
+  border: 1px solid #475569;
+  border-radius: 999px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.topics button.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+/* 搜尋列 */
+.search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.search button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #6366f1;
+  color: #fff;
+  cursor: pointer;
+}
+
+#refresh-btn {
+  background: #334155;
+}
+
+/* 統計小卡 */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card {
+  padding: 14px;
+  border-radius: 10px;
+  background: #1e293b;
+  text-align: center;
+}
+
+.card span {
+  display: block;
+  font-size: 26px;
+  font-weight: bold;
+  color: #a5b4fc;
+}
+
+.card small {
+  color: #94a3b8;
+}
+
+/* ===== 新聞列表 ===== */
+.news-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.news-item {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-left: 4px solid #334155;
+  border-radius: 8px;
+  background: #1e293b;
+}
+
+/* 新出現的新聞：左邊框變綠色 */
+.news-item.is-new {
+  border-left-color: #22c55e;
+}
+
+.news-item a {
+  color: #f1f5f9;
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.news-item a:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* 小標籤：「新」與「熱門」 */
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-right: 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #fff;
+}
+
+.tag.new {
+  background: #16a34a;
+}
+
+.tag.hot {
+  background: #dc2626;
+}
+
+.empty {
+  padding: 30px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.foot {
+  padding: 20px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ===== 手機版：統計卡改成一欄 ===== */
+@media (max-width: 520px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}
