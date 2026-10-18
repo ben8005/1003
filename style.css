@@ -58,6 +58,31 @@ body {
   padding: 20px 16px;
 }
 
+/* 新聞來源按鈕：方形，和圓形的主題按鈕區分 */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #94a3b8;
+}
+
+.sources button {
+  padding: 8px 14px;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.sources button.active {
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+  color: #fff;
+}
+
 /* 主題按鈕 */
 .topics {
   display: flex;

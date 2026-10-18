@@ -17,12 +17,19 @@
   </header>
 
   <main class="wrap">
+    <!-- 新聞來源：英文或中文（data-source 會被 script.js 讀取） -->
+    <nav id="sources" class="sources">
+      <span>來源：</span>
+      <button class="active" data-source="hn">🌍 英文新聞（Hacker News）</button>
+      <button data-source="zh">🇹🇼 中文新聞（Google 新聞）</button>
+    </nav>
+
     <!-- 主題按鈕：點了就切換要監測的關鍵字 -->
     <nav id="topics" class="topics"></nav>
 
     <!-- 搜尋列：自己輸入關鍵字 -->
     <form id="search-form" class="search">
-      <input id="search-input" type="text" placeholder="輸入英文關鍵字，例如 robot、chip…">
+      <input id="search-input" type="text" placeholder="輸入關鍵字，例如 robot、機器人…">
       <button type="submit">搜尋</button>
       <button type="button" id="refresh-btn">立即更新</button>
       <button type="button" id="translate-btn">🈶 中文標題：開</button>
@@ -40,7 +47,7 @@
   </main>
 
   <footer class="foot">
-    資料來源：Hacker News（Algolia 搜尋介面）・翻譯：Google 翻譯・每 5 分鐘自動更新
+    資料來源：Hacker News（Algolia 搜尋介面）、Google 新聞（透過 rss2json 轉換）・翻譯：Google 翻譯・每 5 分鐘自動更新
   </footer>
 
   <script src="script.js"></script>

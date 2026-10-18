@@ -1,14 +1,23 @@
 // ===== 設定區（想改監測主題，改這裡就好）=====
 
-// 主題按鈕：name 是按鈕上的字，query 是拿去搜尋的英文關鍵字
+// 主題按鈕：
+//   name    是按鈕上的字
+//   query   是搜尋英文新聞（Hacker News）用的關鍵字
+//   zhQuery 是搜尋中文新聞（Google 新聞）用的關鍵字，OR 代表「或」
 const TOPICS = [
-  { name: "全部 AI", query: "AI" },
-  { name: "OpenAI", query: "OpenAI" },
-  { name: "Anthropic / Claude", query: "Anthropic" },
-  { name: "Google Gemini", query: "Gemini" },
-  { name: "大型語言模型", query: "LLM" },
-  { name: "AI 晶片", query: "Nvidia" }
+  { name: "全部 AI", query: "AI", zhQuery: "AI OR 人工智慧" },
+  { name: "OpenAI", query: "OpenAI", zhQuery: "OpenAI OR ChatGPT" },
+  { name: "Anthropic / Claude", query: "Anthropic", zhQuery: "Anthropic OR Claude" },
+  { name: "Google Gemini", query: "Gemini", zhQuery: "Gemini" },
+  { name: "大型語言模型", query: "LLM", zhQuery: "大型語言模型 OR LLM" },
+  { name: "AI 晶片", query: "Nvidia", zhQuery: "輝達 OR AI晶片" }
 ];
+
+// 新聞來源按鈕上的名字
+const SOURCE_NAMES = {
+  hn: "英文新聞",
+  zh: "中文新聞"
+};
 
 // 每隔幾分鐘自動更新一次
 const REFRESH_MINUTES = 5;
@@ -28,9 +37,13 @@ const searchForm = document.getElementById("search-form");
 const searchInput = document.getElementById("search-input");
 const refreshBtn = document.getElementById("refresh-btn");
 const translateBtn = document.getElementById("translate-btn");
+const sourcesBox = document.getElementById("sources");
 
 // ===== 狀態 =====
-let currentQuery = TOPICS[0].query; // 目前正在監測的關鍵字
+let currentSource = "hn";               // 目前的新聞來源：hn＝英文、zh＝中文
+let currentQuery = TOPICS[0].query;     // 目前的英文關鍵字
+let currentZhQuery = TOPICS[0].zhQuery; // 目前的中文關鍵字
+let currentBtn = null;                  // 目前亮著的主題按鈕（自訂搜尋時是 null）
 let seenIds = new Set();            // 記住已經看過的新聞編號，用來判斷哪些是「新的」
 let firstLoad = true;               // 第一次載入時，不把全部都標成新的
 let showChinese = true;             // 要不要顯示中文標題
@@ -42,7 +55,10 @@ let viewingFavs = false;            // 現在是不是正在看收藏
 TOPICS.forEach(function (topic, index) {
   const btn = document.createElement("button");
   btn.textContent = topic.name;
-  if (index === 0) btn.classList.add("active");
+  if (index === 0) {
+    btn.classList.add("active");
+    currentBtn = btn;
+  }
 
   btn.addEventListener("click", function () {
     // 把其他按鈕的 active 拿掉，只留目前這顆
@@ -50,7 +66,8 @@ TOPICS.forEach(function (topic, index) {
       b.classList.remove("active");
     });
     btn.classList.add("active");
-    changeQuery(topic.query);
+    currentBtn = btn;
+    changeQuery(topic.query, topic.zhQuery);
   });
 
   topicsBox.appendChild(btn);
@@ -72,9 +89,29 @@ favBtn.addEventListener("click", function () {
 
 topicsBox.appendChild(favBtn);
 
+// ===== 新聞來源按鈕：切換英文／中文 =====
+sourcesBox.querySelectorAll("button").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    sourcesBox.querySelectorAll("button").forEach(function (b) {
+      b.classList.remove("active");
+    });
+    btn.classList.add("active");
+    currentSource = btn.dataset.source; // 讀取 HTML 上的 data-source
+
+    // 如果剛剛在看收藏，把主題按鈕的亮燈還原
+    document.querySelectorAll(".topics button").forEach(function (b) {
+      b.classList.remove("active");
+    });
+    if (currentBtn) currentBtn.classList.add("active");
+
+    changeQuery(currentQuery, currentZhQuery);
+  });
+});
+
 // ===== 切換關鍵字：清空紀錄後重新抓 =====
-function changeQuery(query) {
+function changeQuery(query, zhQuery) {
   currentQuery = query;
+  currentZhQuery = zhQuery;
   viewingFavs = false; // 離開收藏畫面
   seenIds = new Set();
   firstLoad = true;
@@ -91,33 +128,88 @@ async function loadNews() {
 
   setStatus("loading", "讀取中…");
 
+  // 記下這次要抓的來源，抓完時用來檢查使用者是不是已經切換了
+  const source = currentSource;
+  const query = source === "zh" ? currentZhQuery : currentQuery;
+
+  try {
+    // 依照來源，用不同的方法抓新聞（兩種抓回來的格式會整理成一樣）
+    const items = source === "zh" ? await fetchChineseNews(query) : await fetchEnglishNews(query);
+
+    // 等待期間如果使用者切到「我的收藏」或換了來源，就不要蓋掉畫面
+    if (viewingFavs || source !== currentSource) return;
+    showNews(items);
+
+    const time = new Date().toLocaleTimeString("zh-TW");
+    setStatus("ok", "監測中：" + SOURCE_NAMES[source] + "「" + query + "」・最後更新 " + time);
+  } catch (error) {
+    // 沒網路或來源掛掉時會跑到這裡
+    setStatus("error", "讀取失敗，請檢查網路連線（" + error.message + "）");
+  }
+}
+
+// ===== 抓英文新聞（Hacker News）=====
+async function fetchEnglishNews(query) {
   // 只抓最近 3 天的新聞（時間用「秒」來算）
   const threeDaysAgo = Math.floor(Date.now() / 1000) - 3 * 24 * 60 * 60;
 
   // 組合網址：依時間排序、只要文章（story）、最多 30 則
   const url =
     "https://hn.algolia.com/api/v1/search_by_date" +
-    "?query=" + encodeURIComponent(currentQuery) +
+    "?query=" + encodeURIComponent(query) +
     "&tags=story" +
     "&hitsPerPage=30" +
     "&numericFilters=created_at_i>" + threeDaysAgo;
 
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("伺服器回應錯誤：" + response.status);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("伺服器回應錯誤：" + response.status);
 
-    const data = await response.json();
+  const data = await response.json();
+  return data.hits;
+}
 
-    // 等待期間如果使用者切到「我的收藏」，就不要蓋掉收藏畫面
-    if (viewingFavs) return;
-    showNews(data.hits);
+// ===== 抓中文新聞（Google 新聞）=====
+async function fetchChineseNews(query) {
+  // Google 新聞的 RSS 網址：when:3d 代表只要最近 3 天，後面是「台灣、繁體中文」
+  const rssUrl =
+    "https://news.google.com/rss/search" +
+    "?q=" + encodeURIComponent(query + " when:3d") +
+    "&hl=zh-TW&gl=TW&ceid=TW:zh-Hant";
 
-    const time = new Date().toLocaleTimeString("zh-TW");
-    setStatus("ok", "監測中：「" + currentQuery + "」・最後更新 " + time);
-  } catch (error) {
-    // 沒網路或來源掛掉時會跑到這裡
-    setStatus("error", "讀取失敗，請檢查網路連線（" + error.message + "）");
-  }
+  // 瀏覽器不能直接讀 Google 新聞，所以透過 rss2json 這個免費服務轉成 JSON
+  const url = "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent(rssUrl);
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("伺服器回應錯誤：" + response.status);
+
+  const data = await response.json();
+  if (data.status !== "ok") throw new Error(data.message || "中文新聞來源讀取失敗");
+
+  // 把 Google 新聞的格式，整理成和英文新聞一樣的格式，畫面才能共用
+  const items = data.items.map(function (item) {
+    // 標題長這樣：「OpenAI 發表新模型 - 自由時報」，最後一個「 - 」後面是媒體名稱
+    const cut = item.title.lastIndexOf(" - ");
+    const title = cut > 0 ? item.title.slice(0, cut) : item.title;
+    const source = cut > 0 ? item.title.slice(cut + 3) : "Google 新聞";
+
+    // 時間長這樣：「2026-10-18 06:30:00」（世界標準時間），轉成「秒」
+    const time = new Date(item.pubDate.replace(" ", "T") + "Z").getTime();
+
+    return {
+      objectID: item.link, // 用網址當作這則新聞的編號
+      title: title,
+      url: item.link,
+      created_at_i: Math.floor(time / 1000),
+      source: source,
+      lang: "zh"           // 標記成中文新聞
+    };
+  });
+
+  // 依時間排序，最新的在最上面，最多 30 則
+  items.sort(function (a, b) {
+    return b.created_at_i - a.created_at_i;
+  });
+  return items.slice(0, 30);
 }
 
 // ===== 把新聞畫到畫面上 =====
@@ -162,7 +254,7 @@ function createNewsItem(item, isNew, isHot, waitList) {
   const link = item.url || discussUrl;
 
   const li = document.createElement("li");
-  li.className = "news-item" + (isNew ? " is-new" : "");
+  li.className = "news-item" + (isNew ? " is-new" : "") + (item.lang === "zh" ? " is-zh" : "");
 
   // 收藏按鈕（星星）：收藏了是 ★，沒收藏是 ☆
   const star = document.createElement("button");
@@ -192,21 +284,34 @@ function createNewsItem(item, isNew, isHot, waitList) {
   a.appendChild(zh);
   a.appendChild(en);
 
-  // 還沒翻過的，放進等待清單
-  if (zhText === "") {
+  // 還沒翻過的英文新聞，放進等待清單（中文新聞不用翻）
+  if (zhText === "" && item.lang !== "zh") {
     waitList.push({ text: item.title, box: zh });
   }
 
   // 下方的小資訊
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.innerHTML =
+  const tags =
     (isNew ? '<span class="tag new">新</span>' : "") +
-    (isHot ? '<span class="tag hot">熱門</span>' : "") +
-    "🌐 " + getSite(item.url) +
-    "・⏱ " + timeAgo(item.created_at_i) +
-    "・👍 " + (item.points || 0) + " 分" +
-    '・<a href="' + discussUrl + '" target="_blank">💬 ' + (item.num_comments || 0) + " 則留言</a>";
+    (isHot ? '<span class="tag hot">熱門</span>' : "");
+
+  if (item.lang === "zh") {
+    // 中文新聞：顯示媒體名稱和時間（Google 新聞沒有分數和留言）
+    // 媒體名稱是外部來的文字，用 escapeHtml 處理比較安全
+    meta.innerHTML =
+      tags +
+      "📰 " + escapeHtml(item.source) +
+      "・⏱ " + timeAgo(item.created_at_i);
+  } else {
+    // 英文新聞：顯示網站、時間、分數、留言
+    meta.innerHTML =
+      tags +
+      "🌐 " + getSite(item.url) +
+      "・⏱ " + timeAgo(item.created_at_i) +
+      "・👍 " + (item.points || 0) + " 分" +
+      '・<a href="' + discussUrl + '" target="_blank">💬 ' + (item.num_comments || 0) + " 則留言</a>";
+  }
 
   li.appendChild(star);
   li.appendChild(a);
@@ -257,7 +362,9 @@ function toggleFavorite(item) {
       url: item.url,
       created_at_i: item.created_at_i,
       points: item.points,
-      num_comments: item.num_comments
+      num_comments: item.num_comments,
+      source: item.source,
+      lang: item.lang
     });
   }
 
@@ -356,6 +463,13 @@ function setStatus(type, text) {
   statusText.textContent = text;
 }
 
+// 把文字裡的 < > & 等符號換掉，避免被當成 HTML 執行
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // 從網址取出網站名稱，例如 https://www.bbc.com/xxx → bbc.com
 function getSite(url) {
   if (!url) return "news.ycombinator.com";
@@ -383,7 +497,8 @@ searchForm.addEventListener("submit", function (event) {
   document.querySelectorAll(".topics button").forEach(function (b) {
     b.classList.remove("active");
   });
-  changeQuery(word);
+  currentBtn = null;
+  changeQuery(word, word); // 英文、中文都用同一個關鍵字
 });
 
 // 按下「立即更新」
@@ -398,7 +513,8 @@ translateBtn.addEventListener("click", function () {
   // 重新打開時，把還沒翻的補翻
   if (showChinese) {
     const waitList = [];
-    document.querySelectorAll(".news-item").forEach(function (li) {
+    // 只找英文新聞（中文新聞有 is-zh，不用翻）
+    document.querySelectorAll(".news-item:not(.is-zh)").forEach(function (li) {
       const zh = li.querySelector(".zh-title");
       if (zh.textContent === "") {
         waitList.push({ text: li.querySelector(".en-title").textContent, box: zh });
