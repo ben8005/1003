@@ -25,8 +25,9 @@ const REFRESH_MINUTES = 5;
 // 分數超過多少算「熱門」
 const HOT_POINTS = 100;
 
-// 收藏存在瀏覽器裡用的名字
+// 收藏、設定存在瀏覽器裡用的名字
 const FAV_KEY = "ai-news-favorites";
+const SETTINGS_KEY = "ai-news-settings";
 
 // ===== 抓取網頁上的元素 =====
 const topicsBox = document.getElementById("topics");
@@ -97,6 +98,7 @@ sourcesBox.querySelectorAll("button").forEach(function (btn) {
     });
     btn.classList.add("active");
     currentSource = btn.dataset.source; // 讀取 HTML 上的 data-source
+    saveSettings();                      // 記住這次的選擇
 
     // 如果剛剛在看收藏，把主題按鈕的亮燈還原
     document.querySelectorAll(".topics button").forEach(function (b) {
@@ -143,8 +145,18 @@ async function loadNews() {
     const time = new Date().toLocaleTimeString("zh-TW");
     setStatus("ok", "監測中：" + SOURCE_NAMES[source] + "「" + query + "」・最後更新 " + time);
   } catch (error) {
-    // 沒網路或來源掛掉時會跑到這裡
-    setStatus("error", "讀取失敗，請檢查網路連線（" + error.message + "）");
+    // 沒網路或來源掛掉時會跑到這裡（畫面上舊的新聞會保留著）
+    if (viewingFavs || source !== currentSource) return; // 已經切到收藏或換來源了，這個錯誤不用顯示
+
+    let message;
+    if (!navigator.onLine) {
+      message = "你的電腦目前沒有連上網路，連上後按「立即更新」";
+    } else if (source === "zh") {
+      message = "中文新聞來源（rss2json／Google 新聞）暫時無法使用，可能是今天的免費次數用完了，請稍後再按「立即更新」";
+    } else {
+      message = "英文新聞來源（Hacker News）暫時無法使用，請稍後再按「立即更新」";
+    }
+    setStatus("error", message + "（錯誤內容：" + error.message + "）");
   }
 }
 
@@ -418,12 +430,21 @@ function showFavorites() {
 async function translateAll(waitList) {
   if (!showChinese) return; // 關閉翻譯時就不翻
 
+  let failCount = 0; // 翻譯失敗幾則
+
   for (const job of waitList) {
     const result = await translate(job.text);
     if (result) {
       translations[job.text] = result; // 存起來
       job.box.textContent = result;    // 填進畫面
+    } else {
+      failCount++;
     }
+  }
+
+  // 有翻譯失敗的話，在狀態列補一句說明
+  if (failCount > 0) {
+    statusText.textContent += "・有 " + failCount + " 則標題翻譯失敗（Google 翻譯可能暫時無法使用，先顯示英文原文）";
   }
 }
 
@@ -473,7 +494,11 @@ function escapeHtml(text) {
 // 從網址取出網站名稱，例如 https://www.bbc.com/xxx → bbc.com
 function getSite(url) {
   if (!url) return "news.ycombinator.com";
-  return new URL(url).hostname.replace("www.", "");
+  try {
+    return new URL(url).hostname.replace("www.", "");
+  } catch (error) {
+    return "未知網站"; // 網址格式怪怪的，就不要讓整頁壞掉
+  }
 }
 
 // 把時間換成「幾分鐘前」這種好讀的說法
@@ -509,6 +534,7 @@ translateBtn.addEventListener("click", function () {
   showChinese = !showChinese; // 開變關、關變開
   translateBtn.textContent = showChinese ? "🈶 中文標題：開" : "🔤 中文標題：關";
   document.body.classList.toggle("no-zh", !showChinese); // 用 CSS 藏起或顯示中文
+  saveSettings(); // 記住這次的選擇
 
   // 重新打開時，把還沒翻的補翻
   if (showChinese) {
@@ -524,6 +550,66 @@ translateBtn.addEventListener("click", function () {
   }
 });
 
+// ===== 記住設定 =====
+
+// 把目前的來源和中文標題開關存進瀏覽器
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      source: currentSource,
+      showChinese: showChinese
+    }));
+  } catch (error) {
+    // 存不了（例如無痕模式）就算了，下次會用預設值
+  }
+}
+
+// 打開網頁時，把上次的設定套用回來
+function applySavedSettings() {
+  let settings = {};
+  try {
+    settings = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+  } catch (error) {
+    return; // 讀不到就用預設值
+  }
+
+  // 套用上次的新聞來源
+  const sourceBtn = sourcesBox.querySelector('[data-source="' + settings.source + '"]');
+  if (sourceBtn) {
+    sourcesBox.querySelectorAll("button").forEach(function (b) {
+      b.classList.remove("active");
+    });
+    sourceBtn.classList.add("active");
+    currentSource = settings.source;
+  }
+
+  // 套用上次的中文標題開關
+  if (settings.showChinese === false) {
+    showChinese = false;
+    translateBtn.textContent = "🔤 中文標題：關";
+    document.body.classList.add("no-zh");
+  }
+}
+
+// ===== 自動更新：網頁沒在看時先暫停，省下免費服務的次數 =====
+let missedUpdate = false; // 背景期間是否錯過了更新
+
+setInterval(function () {
+  if (document.hidden) {
+    missedUpdate = true; // 分頁在背景，先不抓，記下來
+    return;
+  }
+  loadNews();
+}, REFRESH_MINUTES * 60 * 1000);
+
+// 切回這個分頁時，如果剛剛有錯過更新，就馬上補抓一次
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden && missedUpdate) {
+    missedUpdate = false;
+    loadNews();
+  }
+});
+
 // ===== 啟動 =====
+applySavedSettings();
 loadNews();
-setInterval(loadNews, REFRESH_MINUTES * 60 * 1000); // 定時自動更新
