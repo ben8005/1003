@@ -1,0 +1,200 @@
+/* ===== 顏色設定：改這裡就能換整體配色 ===== */
+:root {
+  --bg: #0d1117;        /* 背景色 */
+  --card: #161b22;      /* 卡片底色 */
+  --line: #30363d;      /* 邊框線 */
+  --text: #e6edf3;      /* 主要文字 */
+  --muted: #8b949e;     /* 次要文字 */
+  --up: #ff4d4f;        /* 台股習慣：上漲用紅色 */
+  --down: #2ecc71;      /* 台股習慣：下跌用綠色 */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+}
+
+/* ===== 頂部標題列 ===== */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.topbar-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.clock {
+  font-family: monospace;
+  font-size: 18px;
+}
+
+.status {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--line);
+  font-size: 14px;
+}
+
+.status.open {
+  background: var(--up);
+}
+
+.notice {
+  margin: 10px 20px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ===== 版面：用 grid 排成兩欄 ===== */
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.card h2 small {
+  font-weight: normal;
+  font-size: 12px;
+}
+
+/* ===== 加權指數 ===== */
+.big-number {
+  font-size: 42px;
+  font-weight: bold;
+}
+
+.change {
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+/* 讓畫布跟著卡片寬度縮放 */
+#index-chart {
+  width: 100%;
+  height: auto;
+}
+
+/* ===== 市場統計 ===== */
+.stats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stats li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ===== 自選股表格 ===== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 代號、名稱靠左比較好讀 */
+th:nth-child(1), td:nth-child(1),
+th:nth-child(2), td:nth-child(2) {
+  text-align: left;
+}
+
+th {
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+th:hover {
+  color: var(--text);
+}
+
+/* 價格變動時閃一下 */
+.flash {
+  animation: flash 0.6s;
+}
+
+@keyframes flash {
+  from { background: rgba(255, 255, 255, 0.2); }
+  to   { background: transparent; }
+}
+
+/* ===== 盤中提醒 ===== */
+.alerts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+.alerts li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ===== 共用顏色 ===== */
+.up    { color: var(--up); }
+.down  { color: var(--down); }
+.muted { color: var(--muted); }
+
+/* ===== 手機版：改成一欄 ===== */
+@media (max-width: 800px) {
+  .grid {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .topbar h1 {
+    font-size: 18px;
+  }
+
+  .big-number {
+    font-size: 32px;
+  }
+
+  th, td {
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+}

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台股戰情室</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 頂部標題列 -->
+  <header class="topbar">
+    <h1>📈 台股戰情室</h1>
+    <div class="topbar-right">
+      <span id="market-status" class="status">判斷中…</span>
+      <span id="clock" class="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <p class="notice">⚠️ 本頁數字皆為「模擬資料」，僅供練習介面使用，不是真實行情，請勿作為投資依據。</p>
+
+  <main class="grid">
+
+    <!-- 加權指數大卡片 -->
+    <section class="card index-card">
+      <h2>加權指數</h2>
+      <div id="index-price" class="big-number">--</div>
+      <div id="index-change" class="change">--</div>
+      <canvas id="index-chart" width="600" height="220"></canvas>
+    </section>
+
+    <!-- 市場統計 -->
+    <section class="card">
+      <h2>市場統計</h2>
+      <ul class="stats">
+        <li><span>上漲家數</span><b id="up-count" class="up">--</b></li>
+        <li><span>下跌家數</span><b id="down-count" class="down">--</b></li>
+        <li><span>平盤家數</span><b id="flat-count">--</b></li>
+        <li><span>成交量（億元）</span><b id="volume">--</b></li>
+      </ul>
+    </section>
+
+    <!-- 自選股清單 -->
+    <section class="card watch-card">
+      <h2>自選股 <small>（點欄位標題可排序）</small></h2>
+      <table>
+        <thead>
+          <tr>
+            <th data-key="code">代號</th>
+            <th data-key="name">名稱</th>
+            <th data-key="price">成交價</th>
+            <th data-key="change">漲跌</th>
+            <th data-key="percent">漲跌幅</th>
+          </tr>
+        </thead>
+        <tbody id="stock-list"></tbody>
+      </table>
+    </section>
+
+    <!-- 盤中提醒 -->
+    <section class="card">
+      <h2>盤中提醒</h2>
+      <ul id="alert-list" class="alerts">
+        <li class="muted">目前沒有提醒</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
